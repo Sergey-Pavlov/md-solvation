@@ -6,15 +6,6 @@ import pytrr
 import MDAnalysis
 import json
 
-t1 = time.perf_counter()
-top_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\40_TFSI\DMSO_TFSI_Li+_O2-.top'
-gro_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\40_TFSI\DMSO_40TFSI_2.gro'
-tpr_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\40_TFSI\DMSO_40TFSI_2.tpr'
-trr_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\40_TFSI\DMSO_40TFSI_1.trr'
-json_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\40_TFSI\DMSO_40TFSI_Li_neighbors.json'
-ion = 'Li'
-rdf = 0.41
-
 def mass_define(address):
     with open(address, 'r') as top:
         dict_mass = {}
@@ -42,17 +33,9 @@ def system_define(address):
                         # In versions before 3.7, the popitem() method removes a random item.
     return system
 
-def in_distance(n, m, box, rdf):
-    def dist(x, l): return x if x + x < l else l - x
-    if dist(abs(n[0] - m[0]), box[0]) > rdf: return False
-    elif dist(abs(n[1] - m[1]), box[1]) > rdf: return False
-    elif dist(abs(n[2] - m[2]), box[2]) > rdf: return False
-    elif sum(map(lambda x1, x2, l: dist(abs(x1 - x2), l)**2, n, m, box)) > rdf * rdf: return False
-    else: return True
-
-def neighbors(address, system, mass, ion, rdf):
-    with pytrr.GroTrrReader(address) as trajectory:
-        ions = list(filter(lambda s: ion in s, system))
+def neighbors(address, system, mass, ion, rel, rdf):
+    ions = list(filter(lambda s: ion in s, system))
+    with pytrr.GroTrrReader(trr_file) as trajectory:
         neighbors = []
         for step, frame in enumerate(trajectory):
             neighbors.append([])
@@ -60,6 +43,7 @@ def neighbors(address, system, mass, ion, rdf):
             prev = 0
             frame_data = trajectory.get_data()
             box = [frame_data['box'][i][i] for i in range(0,3)]
+            #df1 = pd.concat([system_stacked, pd.DataFrame(frame_data['x'], index = system_stacked.index)], axis=1)
             for molecule in system:
                 atoms = [[frame_data['x'][i+prev][0],
                           frame_data['x'][i+prev][1],
@@ -68,14 +52,22 @@ def neighbors(address, system, mass, ion, rdf):
                 coordinates[molecule] = [sum(map(lambda a: a[i] * a[3], atoms)) /
                                          sum(map(lambda a: a[3], atoms)) for i in range(0,3)]
                 prev += len(system[molecule])
+            df = pd.DataFrame.from_dict(coordinates, orient='index')
+            df1 = df.filter(regex=rel, axis=0)
+            names = df1.index.values
             for i, n in enumerate(ions):
-                neighbors[step].append([])
-                coord = coordinates[n]
-                for k in filter(lambda m: in_distance(coord, coordinates[m], box, rdf), coordinates): neighbors[step][i].append(k)
-                try:
-                    neighbors[step][i].remove(n)
-                except ValueError:
-                    pass
+                coord = df.loc[n].values
+                x=df1.to_numpy()
+                x=x-coord
+                x=np.abs(x)
+                x=np.where(x+x < box, x, box-x)
+                nt = np.linalg.norm(x, axis = 1) < rdf
+                neighbors[step].append(list(names[nt]))
+                #try:
+                #    neighbors[step][i].remove(n)
+                #except ValueError:
+                #    pass
+            if step>10: break
     return neighbors
 
 def result_assembler(neighbors):
@@ -107,11 +99,21 @@ def plot_exp(result):
     exp = np.mean(result2, axis=0)
     return exp
 
+top_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\60_TFSI\DMSO_TFSI_Li+_O2-.top'
+gro_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\60_TFSI\DMSO_60TFSI_3.gro'
+trr_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\60_TFSI\DMSO_60TFSI_3.trr'
+json_file = r'C:\Users\Slava\Documents\k\DMSO\NO3\60_TFSI\DMSO_60TFSI_Li_neighbors.json'
+ion = 'Li'
+rel = 'DMSO'
+rdf = 0.41
+
+t1 = time.perf_counter()
 mass = mass_define(top_file)
 system = system_define(gro_file)
-tau1 = neighbors(trr_file, system, mass, ion, rdf)
+#df_system = pd.DataFrame.from_dict(system, orient='index')
+#system_stacked = df_system.stack()
+tau1 = neighbors(trr_file, system, mass, ion, rel, rdf)
 #write_neighbors(json_file, tau1)
 print(len(tau1))
 t2 = time.perf_counter()
 print('{:.0f}:{:05.2f}'.format((t2-t1)//60,(t2-t1)%60))
-
