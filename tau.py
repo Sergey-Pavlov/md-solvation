@@ -67,7 +67,6 @@ def neighbors(address, system, mass, ion, rel, rdf):
                 #    neighbors[step][i].remove(n)
                 #except ValueError:
                 #    pass
-            if step>10: break
     return neighbors
 
 def result_assembler(neighbors):
