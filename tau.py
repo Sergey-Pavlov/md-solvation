@@ -7,6 +7,14 @@ import MDAnalysis
 import json
 
 def mass_define(address):
+    """
+    .top parses
+    get mass data from .top file
+    input:
+        address: path to .top file
+    output:
+        dict with mass
+    """
     with open(address, 'r') as top:
         dict_mass = {}
         for line in top:
@@ -20,6 +28,12 @@ def mass_define(address):
     return dict_mass
 
 def system_define(address):
+    """
+    .gro parser
+    read gro file and get dict molecules-atoms
+    return:
+        system - dict "key" - molecule, item - list of atoms
+    """
     with open(address, 'r') as gro:
         system = {} # Starting from Python 3.7, insertion order of Python dictionaries is guaranteed.
         gro.readline()
@@ -34,6 +48,11 @@ def system_define(address):
     return system
 
 def neighbors(address, system, mass, ion, rel, rdf):
+    """
+    Open traj.trr
+    find centers of mass of molecules
+    neighbors - [step, list of ions, list of neighbors]
+    """
     ions = list(filter(lambda s: ion in s, system))
     with pytrr.GroTrrReader(trr_file) as trajectory:
         neighbors = []
@@ -70,6 +89,11 @@ def neighbors(address, system, mass, ion, rel, rdf):
     return neighbors
 
 def result_assembler(neighbors):
+    """
+    return:
+    array for each ions list of number of neigbors
+    """
+    # TODO: check this function
     result = []
     molnum = 0
     frames = len(neighbors)
@@ -93,6 +117,7 @@ def read_neighbors(address):
         return json.load(read_file)
 
 def plot_exp(result):
+    #TODO: check
     result2 = np.array(result)
 #    print(result2)
     exp = np.mean(result2, axis=0)
