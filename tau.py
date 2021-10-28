@@ -16,7 +16,7 @@ def mass_define(address):
     input:
         address: path to .top file
     output:
-        dict with mass
+        dict with atom mass
     """
     with open(address, 'r') as top:
         dict_mass = {}
@@ -65,6 +65,38 @@ def box_f(address):
         for step, frame in enumerate(trajectory):
             frame_data = trajectory.get_data()
             return frame_data['box'].diagonal()
+
+def mol_com(address, system, mass):
+    """
+    .trr parser
+    read trr file and get molecules centers of mass coordinates
+    input:
+        address: path to .trr file
+        system: dict "key" - molecule, item - list of atoms
+        mass: dict with atom mass
+    output:
+        array of molecules com coordinates
+        (num_of_steps, num_of_molecues, 3[x,y,z]) shaped
+    """
+    com = []
+    mass_arr = [np.array([[mass[atom]]*3 for atom in molecule]) for molecule in system.values()]#массив масс атомов в форме массива координат атомов сгрупированных по молекулам
+    mass_mod = [mol_mass/np.sum(mol_mass, axis=0) for mol_mass in mass_arr]#приведённый на массу молекул массив масс атомов
+    mass_1=np.array([j for i in mass_mod for j in i])
+    chunks = np.array([len(molecule) for molecule in system.values()])
+    stop = np.cumsum(chunks)#границы молекул в массиве координат атомов
+    start = stop[:-1]#границы молекул в массиве координат атомов
+    with pytrr.GroTrrReader(address) as trajectory:
+        for frame in trajectory:
+            frame_data = trajectory.get_data()
+            box = frame_data['box'].diagonal()
+            box2=box/2
+            mask = [(np.ptp(atoms, axis=0) > box2) & (atoms < box2) for atoms in np.vsplit(frame_data['x'],start)]
+            mask = np.array([j for i in mask for j in i])
+            atoms = np.where(mask, frame_data['x']+box, frame_data['x'])
+            atoms = np.multiply(atoms,mass_1)
+            x = np.array([np.sum(i, axis=0) for i in np.vsplit(atoms,start)])
+            com.append(np.where(x < box, x, x-box))
+    return np.array(com)
 
 def neighbors(address, system, mass, ion, sel, rdf):
     """
