@@ -60,6 +60,12 @@ def system_define_v2(address):
             system[multiindex[0]]=[multiindex[1]]
     return system
 
+def box_f(address):
+    with pytrr.GroTrrReader(address) as trajectory:
+        for step, frame in enumerate(trajectory):
+            frame_data = trajectory.get_data()
+            return frame_data['box'].diagonal()
+
 def neighbors(address, system, mass, ion, sel, rdf):
     """
     Open traj.trr
