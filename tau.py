@@ -122,21 +122,29 @@ def neighbors(com, box, system, ref, sel, rdf):
             neighbors[step].append(set(names[nt]))
     return neighbors
 
-def result_assembler(neighbors):
+def result_assembler(neighbors, lf, start_step, limit, num_of_frames, num_of_ref):
     """
+    lf - tolerable escape time in timesteps
+    start_step - timesteps between restarts
+    limit - lenth of investigated trajectory in timesteps
     return:
-    array for each ions list of number of neigbors
+    tau, tau_std, coord_num, coord_num_srd
     """
     # TODO: check this function
+    if num_of_frames < limit+lf:
+        raise ValueError('limit is more than trj')
     result = []
-    num_of_frames = len(neighbors)
-    num_of_ref = len(neighbors[0])
-    for start_frame in range(0, num_of_frames // 3 * 2, num_of_frames // 10):
+    coord = []
+    for start_frame in range(0, num_of_frames - (limit+lf+1), start_step):
         common_neighbors = [neighbors[start_frame]]
-        for common, whole, step in zip(common_neighbors, neighbors[start_frame+1 :], range(num_of_frames // 10)):
-            common_neighbors.append([list(set(common[i]) & set(whole[i])) for i in range(num_of_ref)])
-        result.extend([[len(step[i]) for step in common_neighbors] for i in range(num_of_ref)])
-    return result
+        for num, common in zip(range(limit), common_neighbors):
+            view = list(map(set.union,*neighbors[start_frame+1+num:start_frame+1+num+lf]))
+            common_neighbors.append([common[ref_i].intersection(view[ref_i]) for ref_i in range(num_of_ref)])
+        coord.extend([len(common_neighbors[0][ref_i]) for ref_i in range(num_of_ref)])
+        result.extend([[len(step[ref_i]) for step in common_neighbors] for ref_i in range(num_of_ref)])
+    coord_np_arr = np.array(coord)
+    result_np_arr = np.array(result)
+    return np.mean(result_np_arr, axis=0), np.std(result_np_arr, axis=0), np.mean(coord_np_arr), np.std(coord_np_arr)
 
 def write_neighbors(address, neighbors):
     with open(jsonfile, 'w') as data_file:
