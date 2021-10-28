@@ -98,45 +98,28 @@ def mol_com(address, system, mass):
             com.append(np.where(x < box, x, x-box))
     return np.array(com)
 
-def neighbors(address, system, mass, ion, sel, rdf):
+def neighbors(com, box, system, ref, sel, rdf):
     """
-    Open traj.trr
-    find centers of mass of molecules
+    get sel-type entities within rdf radius of ref-type entities,
+    presented in system, com - coordinates for system
     neighbors - [step, list of ions, list of neighbors]
-    """
-    ions = list(filter(lambda s: ion in s, system))
-    with pytrr.GroTrrReader(trr_file) as trajectory:
-        neighbors = []
-        for step, frame in enumerate(trajectory):
-            neighbors.append([])
-            coordinates = {}
-            done = 0
-            frame_data = trajectory.get_data()
-            box = [frame_data['box'][i][i] for i in range(0,3)]
-            #df1 = pd.concat([system_stacked, pd.DataFrame(frame_data['x'], index = system_stacked.index)], axis=1)
-            for molecule in system:
-                atoms = [[frame_data['x'][i+done][0],
-                          frame_data['x'][i+done][1],
-                          frame_data['x'][i+done][2],
-                          mass[atom]] for i, atom in enumerate(system[molecule])]
-                coordinates[molecule] = [sum(map(lambda a: a[i] * a[3], atoms)) /
-                                         sum(map(lambda a: a[3], atoms)) for i in range(0,3)]
-                done += len(system[molecule])
-            df = pd.DataFrame.from_dict(coordinates, orient='index')
-            df1 = df.filter(regex=sel, axis=0)
-            names = df1.index.values
-            for i, n in enumerate(ions):
-                coord = df.loc[n].values
-                x=df1.to_numpy()
-                x=x-coord
-                x=np.abs(x)
-                x=np.where(x+x < box, x, box-x)
-                nt = np.linalg.norm(x, axis = 1) < rdf
-                neighbors[step].append(list(names[nt]))
-                #try:
-                #    neighbors[step][i].remove(n)
-                #except ValueError:
-                #    pass
+    """    
+    mask_ref = np.array([(ref in i) for i in system.keys()])
+    mask_sel = np.array([(sel in i) for i in system.keys()])
+    if ~np.any(mask_ref):
+        raise KeyError('No {} in system'.format(ref))
+    if ~np.any(mask_sel):
+        raise KeyError('No {} in system'.format(sel))
+    names = np.array(list(system.keys()))[mask_sel]
+    neighbors = []
+    for step, coordinates in enumerate(com):
+        neighbors.append([])
+        coord=coordinates[mask_sel]
+        for n in coordinates[mask_ref]:
+            x=np.abs(coord-n)
+            x=np.where(x+x < box, x, box-x)
+            nt = np.linalg.norm(x, axis = 1) < rdf
+            neighbors[step].append(set(names[nt]))
     return neighbors
 
 def result_assembler(neighbors):
