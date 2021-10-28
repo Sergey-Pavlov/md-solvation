@@ -50,6 +50,16 @@ def system_define(address):
                         # In versions before 3.7, the popitem() method removes a random item.
     return system
 
+def system_define_v2(address):
+    df = pd.read_fwf(address, widths=[9,6,5,8,8,8,8,8,8], header=None, index_col=(0,1), skiprows=2, skipfooter=1)
+    system={}
+    for multiindex in df.index.values:
+        try:
+            system[multiindex[0]].append(multiindex[1])
+        except KeyError:
+            system[multiindex[0]]=[multiindex[1]]
+    return system
+
 def neighbors(address, system, mass, ion, sel, rdf):
     """
     Open traj.trr
