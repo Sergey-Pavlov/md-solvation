@@ -164,6 +164,15 @@ def displacement(com, system, box, sel, steps_restart=1):
         displacement_arr.append(np.transpose(cc))
     return displacement_arr
 
+def msd_masking(neighbors, num_of_frames, num_of_ref, t_escape, condition, increment=1):
+    cc0=np.zeros((num_of_ref, t_escape), dtype=bool)
+    cc1=np.array(list(map(lambda row: list(map(len, row)), neighbors))).T
+    cc2=np.where(cc1==condition, True, False)
+    cc2=np.concatenate((cc0,cc2,cc0), axis=-1)
+    cc3=[[(i[j]&np.any(i[j+1:j+t_escape]))|(i[j]&np.any(i[j+1-t_escape:j]))|(np.any(i[j+1-t_escape:j])&np.any(i[j+1:j+t_escape]))
+          for j in range(t_escape, len(i[0:-t_escape]))] for i in cc2]
+    return np.array(cc3)
+
 def write_neighbors(address, neighbors):
     with open(jsonfile, 'w') as data_file:
         json.dump(neighbors, data_file)
