@@ -146,6 +146,24 @@ def result_assembler(neighbors, lf, start_step, limit, num_of_frames, num_of_ref
     result_np_arr = np.array(result)
     return np.mean(result_np_arr, axis=0), np.std(result_np_arr, axis=0), np.mean(coord_np_arr), np.std(coord_np_arr)
 
+def displacement(com, system, box, sel, steps_restart=1):
+    '''
+    computes the square displacement of molecules of given type
+    '''
+    mask = np.array([(sel in i) for i in system.keys()])
+    if ~np.any(mask):
+        raise KeyError('No {} in system'.format(sel))
+    displacement_arr=[]
+    data = np.transpose(np.transpose(com, (1,0,2))[mask], (1,0,2))
+    for n, initial_position in enumerate(data[::steps_restart]):
+        diff=np.diff(data[n::steps_restart], axis=0, prepend=[initial_position])
+        bound_cross_mask = np.where(np.absolute(diff)>box/2, -np.sign(diff), 0)
+        bound_cross_count = np.cumsum(bound_cross_mask,axis=0)
+        bound_cross_addition = np.multiply(bound_cross_count,box)
+        cc=np.sum(np.square(data[n::steps_restart]+bound_cross_addition-initial_position), axis=-1)
+        displacement_arr.append(np.transpose(cc))
+    return displacement_arr
+
 def write_neighbors(address, neighbors):
     with open(jsonfile, 'w') as data_file:
         json.dump(neighbors, data_file)
