@@ -67,6 +67,7 @@ class GromacsOutdata():
         indexes - array with corrspondance between atoms_index and molecele_index (for example: indexes[i] gives list of atoms_index of i-th molecule)
         atomlist[i] gives name of i-th atom
         mollist[i] gives name of i-th molecule
+        Units of coordinates are Angstroms
         """
         with open(filename) as inf:
             line_number = 0
@@ -86,7 +87,7 @@ class GromacsOutdata():
                     moleculename = line[5:12].strip()
                     if get_coordinates:
                         coordinate = list(map(float, line[20:].strip().split()))
-                        coordinates.append(coordinate)
+                        coordinates.append(np.array(coordinate) * 10)
                     if molecule_index_pr == -1:
                         mollist.append(moleculename)
                         molecule_index_pr = molecule_index
@@ -104,9 +105,9 @@ class GromacsOutdata():
             if get_coordinates:
                 box_data = list(map(float, line.strip().split()))
                 if len(box_data) == 3:
-                    box = np.array([[box_data[0], 0, 0],
-                                    [0, box_data[1], 0],
-                                    [0, 0, box_data[2]]])
+                    box = np.array([[box_data[0] * 10, 0, 0],
+                                    [0, box_data[1] * 10, 0],
+                                    [0, 0, box_data[2] * 10]])
                 else:
                     raise ValueError('Cannot process non-orthorhombic boxes')
                 self.system = System(atomlist, mollist, indexes, box, np.array(coordinates))
