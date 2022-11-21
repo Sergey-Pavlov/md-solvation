@@ -16,7 +16,7 @@ def mass_define(address):
     input:
         address: path to .top file
     output:
-        dict with mass
+        dict with atom mass
     """
     with open(address, 'r') as top:
         dict_mass = {}
@@ -50,62 +50,128 @@ def system_define(address):
                         # In versions before 3.7, the popitem() method removes a random item.
     return system
 
-def neighbors(address, system, mass, ion, sel, rdf):
-    """
-    Open traj.trr
-    find centers of mass of molecules
-    neighbors - [step, list of ions, list of neighbors]
-    """
-    ions = list(filter(lambda s: ion in s, system))
-    with pytrr.GroTrrReader(trr_file) as trajectory:
-        neighbors = []
+def system_define_v2(address):
+    df = pd.read_fwf(address, widths=[9,6,5,8,8,8,8,8,8], header=None, index_col=(0,1), skiprows=2, skipfooter=1)
+    system={}
+    for multiindex in df.index.values:
+        try:
+            system[multiindex[0]].append(multiindex[1])
+        except KeyError:
+            system[multiindex[0]]=[multiindex[1]]
+    return system
+
+def box_f(address):
+    with pytrr.GroTrrReader(address) as trajectory:
         for step, frame in enumerate(trajectory):
-            neighbors.append([])
-            coordinates = {}
-            done = 0
             frame_data = trajectory.get_data()
-            box = [frame_data['box'][i][i] for i in range(0,3)]
-            #df1 = pd.concat([system_stacked, pd.DataFrame(frame_data['x'], index = system_stacked.index)], axis=1)
-            for molecule in system:
-                atoms = [[frame_data['x'][i+done][0],
-                          frame_data['x'][i+done][1],
-                          frame_data['x'][i+done][2],
-                          mass[atom]] for i, atom in enumerate(system[molecule])]
-                coordinates[molecule] = [sum(map(lambda a: a[i] * a[3], atoms)) /
-                                         sum(map(lambda a: a[3], atoms)) for i in range(0,3)]
-                done += len(system[molecule])
-            df = pd.DataFrame.from_dict(coordinates, orient='index')
-            df1 = df.filter(regex=sel, axis=0)
-            names = df1.index.values
-            for i, n in enumerate(ions):
-                coord = df.loc[n].values
-                x=df1.to_numpy()
-                x=x-coord
-                x=np.abs(x)
-                x=np.where(x+x < box, x, box-x)
-                nt = np.linalg.norm(x, axis = 1) < rdf
-                neighbors[step].append(list(names[nt]))
-                #try:
-                #    neighbors[step][i].remove(n)
-                #except ValueError:
-                #    pass
+            return frame_data['box'].diagonal()
+
+def mol_com(address, system, mass):
+    """
+    .trr parser
+    read trr file and get molecules centers of mass coordinates
+    input:
+        address: path to .trr file
+        system: dict "key" - molecule, item - list of atoms
+        mass: dict with atom mass
+    output:
+        array of molecules com coordinates
+        (num_of_steps, num_of_molecues, 3[x,y,z]) shaped
+    """
+    com = []
+    mass_arr = [np.array([[mass[atom]]*3 for atom in molecule]) for molecule in system.values()]#массив масс атомов в форме массива координат атомов сгрупированных по молекулам
+    mass_mod = [mol_mass/np.sum(mol_mass, axis=0) for mol_mass in mass_arr]#приведённый на массу молекул массив масс атомов
+    mass_1=np.array([j for i in mass_mod for j in i])
+    chunks = np.array([len(molecule) for molecule in system.values()])
+    stop = np.cumsum(chunks)#границы молекул в массиве координат атомов
+    start = stop[:-1]#границы молекул в массиве координат атомов
+    with pytrr.GroTrrReader(address) as trajectory:
+        for frame in trajectory:
+            frame_data = trajectory.get_data()
+            box = frame_data['box'].diagonal()
+            box2=box/2
+            mask = [(np.ptp(atoms, axis=0) > box2) & (atoms < box2) for atoms in np.vsplit(frame_data['x'],start)]
+            mask = np.array([j for i in mask for j in i])
+            atoms = np.where(mask, frame_data['x']+box, frame_data['x'])
+            atoms = np.multiply(atoms,mass_1)
+            x = np.array([np.sum(i, axis=0) for i in np.vsplit(atoms,start)])
+            com.append(np.where(x < box, x, x-box))
+    return np.array(com)
+
+def neighbors(com, box, system, ref, sel, rdf):
+    """
+    get sel-type entities within rdf radius of ref-type entities,
+    presented in system, com - coordinates for system
+    neighbors - [step, list of ions, list of neighbors]
+    """    
+    mask_ref = np.array([(ref in i) for i in system.keys()])
+    mask_sel = np.array([(sel in i) for i in system.keys()])
+    if ~np.any(mask_ref):
+        raise KeyError('No {} in system'.format(ref))
+    if ~np.any(mask_sel):
+        raise KeyError('No {} in system'.format(sel))
+    names = np.array(list(system.keys()))[mask_sel]
+    neighbors = []
+    for step, coordinates in enumerate(com):
+        neighbors.append([])
+        coord=coordinates[mask_sel]
+        for n in coordinates[mask_ref]:
+            x=np.abs(coord-n)
+            x=np.where(x+x < box, x, box-x)
+            nt = np.linalg.norm(x, axis = 1) < rdf
+            neighbors[step].append(set(names[nt]))
     return neighbors
 
-def result_assembler(neighbors):
+def result_assembler(neighbors, lf, start_step, limit, num_of_frames, num_of_ref):
     """
+    lf - tolerable escape time in timesteps
+    start_step - timesteps between restarts
+    limit - lenth of investigated trajectory in timesteps
     return:
-    array for each ions list of number of neigbors
+    tau, tau_std, coord_num, coord_num_srd
     """
     # TODO: check this function
+    if num_of_frames < limit+lf:
+        raise ValueError('limit is more than trj')
     result = []
-    num_of_frames = len(neighbors)
-    num_of_ref = len(neighbors[0])
-    for start_frame in range(0, num_of_frames // 3 * 2, num_of_frames // 10):
+    coord = []
+    for start_frame in range(0, num_of_frames - (limit+lf+1), start_step):
         common_neighbors = [neighbors[start_frame]]
-        for common, whole, step in zip(common_neighbors, neighbors[start_frame+1 :], range(num_of_frames // 10)):
-            common_neighbors.append([list(set(common[i]) & set(whole[i])) for i in range(num_of_ref)])
-        result.extend([[len(step[i]) for step in common_neighbors] for i in range(num_of_ref)])
-    return result
+        for num, common in zip(range(limit), common_neighbors):
+            view = list(map(set.union,*neighbors[start_frame+1+num:start_frame+1+num+lf]))
+            common_neighbors.append([common[ref_i].intersection(view[ref_i]) for ref_i in range(num_of_ref)])
+        coord.extend([len(common_neighbors[0][ref_i]) for ref_i in range(num_of_ref)])
+        result.extend([[len(step[ref_i]) for step in common_neighbors] for ref_i in range(num_of_ref)])
+    coord_np_arr = np.array(coord)
+    result_np_arr = np.array(result)
+    return np.mean(result_np_arr, axis=0), np.std(result_np_arr, axis=0), np.mean(coord_np_arr), np.std(coord_np_arr)
+
+def displacement(com, system, box, sel, steps_restart=1):
+    '''
+    computes the square displacement of molecules of given type
+    '''
+    mask = np.array([(sel in i) for i in system.keys()])
+    if ~np.any(mask):
+        raise KeyError('No {} in system'.format(sel))
+    displacement_arr=[]
+    data = np.transpose(np.transpose(com, (1,0,2))[mask], (1,0,2))
+    for n, initial_position in enumerate(data[::steps_restart]):
+        diff=np.diff(data[n::steps_restart], axis=0, prepend=[initial_position])
+        bound_cross_mask = np.where(np.absolute(diff)>box/2, -np.sign(diff), 0)
+        bound_cross_count = np.cumsum(bound_cross_mask,axis=0)
+        bound_cross_addition = np.multiply(bound_cross_count,box)
+        cc=np.sum(np.square(data[n::steps_restart]+bound_cross_addition-initial_position), axis=-1)
+        displacement_arr.append(np.transpose(cc))
+    return displacement_arr
+
+def msd_masking(neighbors, num_of_frames, num_of_ref, t_escape, condition, increment=1):
+    cc0=np.zeros((num_of_ref, t_escape), dtype=bool)
+    cc1=np.array(list(map(lambda row: list(map(len, row)), neighbors))).T
+    cc2=np.where(cc1==condition, True, False)
+    cc2=np.concatenate((cc0,cc2,cc0), axis=-1)
+    cc3=[[(i[j]&np.any(i[j+1:j+t_escape]))|(i[j]&np.any(i[j+1-t_escape:j]))|(np.any(i[j+1-t_escape:j])&np.any(i[j+1:j+t_escape]))
+          for j in range(t_escape, len(i[0:-t_escape]))] for i in cc2]
+    return np.array(cc3)
 
 def write_neighbors(address, neighbors):
     with open(jsonfile, 'w') as data_file:
