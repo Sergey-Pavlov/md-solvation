@@ -1,5 +1,4 @@
 import numpy as np
-from ..core.structure import Trajectory
 
 class GromacsOutdata():
 
@@ -24,6 +23,7 @@ class GromacsOutdata():
                     coordinates.append(frame_data['x'])
             coordinates = np.array(coordinates)
             box = np.array(box)
+            from mdsolv.core.structure import Trajectory
             self.trajectory = Trajectory(box, coordinates)
 
     def read_top(self, filename):
@@ -61,20 +61,22 @@ class GromacsOutdata():
                             # In versions before 3.7, the popitem() method removes a random item.
         self.system = system
 
-    def read_gro_file(self,filename):
+    def read_gro_file(self, filename, get_coordinates=False):
         """
         This function reads .gro input Gromacs file in order to put into correspondance atoms index and atom_types, molecules and weights
         indexes - array with corrspondance between atoms_index and molecele_index (for example: indexes[i] gives list of atoms_index of i-th molecule)
-        atom_names[i] gives name of i-th atom
-        molecule_names[i] gives name of i-th molecule
+        atomlist[i] gives name of i-th atom
+        mollist[i] gives name of i-th molecule
         """
         with open(filename) as inf:
             line_number = 0
             molecule_index_pr = -1
             indexes = []
-            atom_names = []
-            molecule_names = []
+            atomlist = []
+            mollist = []
             atoms_in_one_molecule = []
+            if get_coordinates:
+                coordinates = []
             for line in inf:
                 line_number += 1
                 if len(line) > 40:
@@ -82,8 +84,11 @@ class GromacsOutdata():
                     molecule_index = int(line[0:5]) - 1
                     atomname = line[12:15].strip()
                     moleculename = line[5:12].strip()
+                    if get_coordinates:
+                        coordinate = list(map(float, line[20:].strip().split()))
+                        coordinates.append(coordinate)
                     if molecule_index_pr == -1:
-                        molecule_names.append(moleculename)
+                        mollist.append(moleculename)
                         molecule_index_pr = molecule_index
                     if molecule_index == molecule_index_pr:
                         atoms_in_one_molecule.append(atom_index)
@@ -92,12 +97,21 @@ class GromacsOutdata():
                         atoms_in_one_molecule = []
                         atoms_in_one_molecule.append(atom_index)
                         molecule_index_pr = molecule_index
-                        molecule_names.append(moleculename)
-                    atom_names.append(atomname)
-            indexes.append(atoms_in_one_molecule)
-            self.indexes = indexes
-            self.atom_names = atom_names
-            self.molecule_names = molecule_names
+                        mollist.append(moleculename)
+                    atomlist.append(atomname)
+            indexes.append(np.array(atoms_in_one_molecule))
+            from mdsolv.core.structure import System
+            if get_coordinates:
+                box_data = list(map(float, line.strip().split()))
+                if len(box_data) == 3:
+                    box = np.array([[box_data[0], 0, 0],
+                                    [0, box_data[1], 0],
+                                    [0, 0, box_data[2]]])
+                else:
+                    raise ValueError('Cannot process non-orthorhombic boxes')
+                self.system = System(atomlist, mollist, indexes, box, np.array(coordinates))
+            else:
+                self.system = System(atomlist, mollist, indexes)
 
     def read_mdlog(self):
         """
