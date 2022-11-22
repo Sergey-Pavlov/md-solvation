@@ -13,12 +13,18 @@ class System:
 
     def __add__(self, other):
         atomlist = self.atomlist + other.atomlist
-        mollist = self.mollist + other.mollist
-        last_index = self.indexes[-1][-1]
-        indexes = self.indexes.copy()
-        for ind in other.indexes:
-            indexes.append(np.array(ind) + last_index)
+        if self.indexes is None or other.indexes is None:
+            indexes = None
+        else:
+            last_index = self.indexes[-1][-1]
+            indexes = self.indexes.copy()
+            for ind in other.indexes:
+                indexes.append(np.array(ind) + last_index)
         box = self.box
+        if self.mollist is None or other.mollist is None:
+            mollist = None
+        else:
+            mollist = self.mollist + other.mollist
         if self.coordinates is None or other.coordinates is None:
             return System(atomlist, mollist, indexes)
         else:
