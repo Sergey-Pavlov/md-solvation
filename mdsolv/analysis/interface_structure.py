@@ -187,8 +187,15 @@ class Interface_Analyser:
             mask_atom3 = np.array((atomlist == atomtypes[2])) * mask_mol
         else:
             if len(atomtypes) == 2:
-                mask_atom1 = np.array((atomlist == atomtypes[0])) * mask_mol
-                mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
+                if atomtypes[0] == atomtypes[1]:
+                    mask_atom = np.array((atomlist == atomtypes[0])) * mask_mol
+                    mask_atom1 = np.copy(mask_atom)
+                    mask_atom2 = np.copy(mask_atom)
+                    mask_atom1[::2] = False
+                    mask_atom2[1:-1:2] = False
+                else:
+                    mask_atom1 = np.array((atomlist == atomtypes[0])) * mask_mol
+                    mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
             else:
                 raise ValueError("Another options are not ready yet")
         with pytrr.GroTrrReader(traj_path) as trajectory:
@@ -220,12 +227,13 @@ class Interface_Analyser:
                         raise ValueError("Another options are not ready yet")
         cos_data = np.array(cos_data)
         traj_data = np.array(traj_data)
-        bins = (np.array([6.273, 4.26]) // dx).astype(int)
-        steps = traj_data.shape[0]
         traj_data = traj_data.reshape(-1, 3)
         cos_data = cos_data.reshape(-1, )
-        hist_z, bins_z = np.histogram(traj_data[:, 2], bins=bins[0], range=[0.001, 6.272],
+        z_data = traj_data[:, 2]
+        n_bins = int((z_data.max() - z_data.min()) // dx)
+        hist_cos, bins = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()],
                                       weights=cos_data)
-        volume_z = box[0] * box[1] * (bins_z[1] - bins_z[0])
-        hist_z = hist_z / volume_z / steps
-        return hist_z, bins_z
+        hist, _ = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()])
+        mean_cos = hist_cos / hist
+        z = (bins[:-1] + bins[1:]) / 2
+        return z, mean_cos
