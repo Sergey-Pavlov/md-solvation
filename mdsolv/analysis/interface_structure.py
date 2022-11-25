@@ -168,7 +168,7 @@ class Interface_Analyser:
         hist_z = hist_z * Da / volume_z / steps / nm_to_cm ** 3
         return hist_z, bins_z
 
-    def calculate_orientational_order_1d(self, traj_path, dx, mol_type, atomtypes, three_atom_plane=True, two_atoms_vector=False):
+    def calculate_orientational_order_1d(self, traj_path, dx, mol_type, atomtypes):
         from string import digits
         import pytrr
         traj_data = []
@@ -181,12 +181,12 @@ class Interface_Analyser:
         system_flatten = list(itertools.chain(*list(self.system.values())))
         atomlist = np.array(system_flatten)
         mask_mol = np.array((mollist == mol_type))
-        if three_atom_plane:
+        if len(atomtypes) == 3:
             mask_atom1 = np.array((atomlist == atomtypes[0])) * mask_mol
             mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
             mask_atom3 = np.array((atomlist == atomtypes[2])) * mask_mol
         else:
-            if two_atoms_vector:
+            if len(atomtypes) == 2:
                 mask_atom1 = np.array((atomlist == atomtypes[0])) * mask_mol
                 mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
             else:
@@ -196,7 +196,7 @@ class Interface_Analyser:
                 frame_data = trajectory.get_data()
                 if step == 0:
                     box = np.array([frame_data['box'][i][i] for i in range(0, 3)])
-                if three_atom_plane:
+                if len(atomtypes) == 3:
                     data_atom1 = frame_data['x'][mask_atom1]
                     data_atom2 = frame_data['x'][mask_atom2]
                     data_atom3 = frame_data['x'][mask_atom3]
@@ -208,7 +208,7 @@ class Interface_Analyser:
                     traj_data.append(data_atom1)
                     cos_data.append(cos)
                 else:
-                    if two_atoms_vector:
+                    if len(atomtypes) == 2:
                         data_atom1 = frame_data['x'][mask_atom1]
                         data_atom2 = frame_data['x'][mask_atom2]
                         vec = data_atom2 - data_atom1
