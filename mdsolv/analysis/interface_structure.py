@@ -168,7 +168,7 @@ class Interface_Analyser:
         hist_z = hist_z * Da / volume_z / steps / nm_to_cm ** 3
         return hist_z, bins_z
 
-    def calculate_orientational_order_1d(self, traj_path, dx, mol_type, atomtypes, three_atom_plane=True):
+    def calculate_orientational_order_1d(self, traj_path, dx, mol_type, atomtypes, three_atom_plane=True, two_atoms_vector=False):
         from string import digits
         import pytrr
         traj_data = []
@@ -186,7 +186,11 @@ class Interface_Analyser:
             mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
             mask_atom3 = np.array((atomlist == atomtypes[2])) * mask_mol
         else:
-            raise ValueError("Another options are not ready yet")
+            if two_atoms_vector:
+                mask_atom1 = np.array((atomlist == atomtypes[0])) * mask_mol
+                mask_atom2 = np.array((atomlist == atomtypes[1])) * mask_mol
+            else:
+                raise ValueError("Another options are not ready yet")
         with pytrr.GroTrrReader(traj_path) as trajectory:
             for step, frame in enumerate(trajectory):
                 frame_data = trajectory.get_data()
@@ -204,7 +208,16 @@ class Interface_Analyser:
                     traj_data.append(data_atom1)
                     cos_data.append(cos)
                 else:
-                    raise ValueError("Another options are not ready yet")
+                    if two_atoms_vector:
+                        data_atom1 = frame_data['x'][mask_atom1]
+                        data_atom2 = frame_data['x'][mask_atom2]
+                        vec = data_atom2 - data_atom1
+                        vec_z = np.tile(np.array([0.0, 0.0, 1.0]), len(vec)).reshape(vec.shape)
+                        cos = np.sum(vec * vec_z, axis=1) / np.linalg.norm(vec, axis=1) / np.linalg.norm(vec_z, axis=1)
+                        traj_data.append(data_atom1)
+                        cos_data.append(cos)
+                    else:
+                        raise ValueError("Another options are not ready yet")
         cos_data = np.array(cos_data)
         traj_data = np.array(traj_data)
         bins = (np.array([6.273, 4.26]) // dx).astype(int)
