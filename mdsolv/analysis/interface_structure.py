@@ -173,6 +173,7 @@ class Interface_Analyser:
         import pytrr
         traj_data = []
         cos_data = []
+        p2_data = []
         remove_digits = str.maketrans('', '', digits)
         mol_names = [s.translate(remove_digits) for s in list(self.system.keys())]
         mol_names = np.array(mol_names)
@@ -213,7 +214,9 @@ class Interface_Analyser:
                     vec_z = np.tile(np.array([0.0, 0.0, 1.0]), len(vec)).reshape(vec.shape)
                     cos = np.sum(vec * vec_z, axis=1) / np.linalg.norm(vec, axis=1) / np.linalg.norm(vec_z, axis=1)
                     traj_data.append(data_atom1)
+                    p2 = 3/2 * cos ** 2 - 1/2
                     cos_data.append(cos)
+                    p2_data.append(p2)
                 else:
                     if len(atomtypes) == 2:
                         data_atom1 = frame_data['x'][mask_atom1]
@@ -222,18 +225,23 @@ class Interface_Analyser:
                         vec_z = np.tile(np.array([0.0, 0.0, 1.0]), len(vec)).reshape(vec.shape)
                         cos = np.sum(vec * vec_z, axis=1) / np.linalg.norm(vec, axis=1) / np.linalg.norm(vec_z, axis=1)
                         traj_data.append(data_atom1)
+                        p2 = 3 / 2 * cos ** 2 - 1 / 2
                         cos_data.append(cos)
+                        p2_data.append(p2)
                     else:
                         raise ValueError("Another options are not ready yet")
         cos_data = np.array(cos_data)
+        p2_data = np.array(p2_data)
         traj_data = np.array(traj_data)
         traj_data = traj_data.reshape(-1, 3)
         cos_data = cos_data.reshape(-1, )
+        p2_data = p2_data.reshape(-1, )
         z_data = traj_data[:, 2]
         n_bins = int((z_data.max() - z_data.min()) // dx)
         hist_cos, bins = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()],
                                       weights=cos_data)
         hist, _ = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()])
         mean_cos = hist_cos / hist
+        mean_p2 = p2_hist / hist
         z = (bins[:-1] + bins[1:]) / 2
-        return z, mean_cos
+        return z, mean_cos, mean_p2
