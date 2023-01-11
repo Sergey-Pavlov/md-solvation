@@ -240,6 +240,8 @@ class Interface_Analyser:
         n_bins = int((z_data.max() - z_data.min()) // dx)
         hist_cos, bins = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()],
                                       weights=cos_data)
+        p2_hist, _ = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()],
+                                      weights=p2_data)
         hist, _ = np.histogram(traj_data[:, 2], bins=n_bins, range=[z_data.min(), z_data.max()])
         mean_cos = hist_cos / hist
         mean_p2 = p2_hist / hist
